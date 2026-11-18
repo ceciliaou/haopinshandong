@@ -599,6 +599,8 @@ if generate:
     st.session_state["gen_fixed"] = None
     st.session_state["expand_source"] = st.session_state["features"]
     st.session_state["expand_platform"] = platform if platform in PLATFORM_KEYS else "xiaohongshu"
+    st.session_state["expand_category"] = content_gaps.detect_category(st.session_state["product"])
+    st.session_state["expand_last_product"] = st.session_state["product"]
     st.session_state["expand_result"] = None
     st.session_state["expand_body"] = ""
     st.session_state["expand_seed"] = 0
@@ -790,6 +792,18 @@ with tab_expand:
     st.session_state.setdefault("expand_length", "标准")
     st.session_state.setdefault("expand_seed", 0)
     st.session_state.setdefault("expand_source", st.session_state["features"])
+    detected_category = content_gaps.detect_category(product)
+    if detected_category == "通用":
+        detected_category = content_gaps.detect_category(f"{product} {st.session_state['features']}")
+    if detected_category not in expander.CATEGORIES:
+        detected_category = "通用"
+    if st.session_state.get("expand_last_product") != product:
+        st.session_state["expand_category"] = detected_category
+        st.session_state["expand_last_product"] = product
+        st.session_state["expand_result"] = None
+        st.session_state["expand_body"] = ""
+    if st.session_state.get("expand_category") not in expander.CATEGORIES:
+        st.session_state["expand_category"] = detected_category
 
     input_col, setting_col = st.columns([1.3, 1], gap="large")
     with input_col:
@@ -801,6 +815,12 @@ with tab_expand:
         )
         st.caption("几句话、几个卖点即可。扩写会保留这些事实，不会自动编造检测、价格或产地。")
     with setting_col:
+        expand_category = st.selectbox(
+            "产品种类（先确认）",
+            expander.CATEGORIES,
+            key="expand_category",
+        )
+        st.caption("先选品类，扩写会按该品类的场景、句式和用法生成。")
         expand_platform = st.selectbox(
             "目标渠道",
             PLATFORM_KEYS,
@@ -826,6 +846,7 @@ with tab_expand:
             expand_style,
             expand_length,
             seed=st.session_state.get("expand_seed", 0),
+            category=expand_category,
         )
         st.session_state["expand_result"] = result
         st.session_state["expand_body"] = result["body"]
@@ -849,7 +870,7 @@ with tab_expand:
             </div>
             """
         )
-        st.progress(result["fullness"] / 100, text=f"{result['fullness_level']} · {result['style']} · {PLATFORM_LABELS[result['channel']]}")
+        st.progress(result["fullness"] / 100, text=f"{result['fullness_level']} · {result['category']} · {result['style']} · {PLATFORM_LABELS[result['channel']]}")
         if result.get("title"):
             block(f'<div class="expand-title">{html.escape(result["title"])}</div>')
 

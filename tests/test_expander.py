@@ -38,6 +38,25 @@ class ExpandTests(unittest.TestCase):
         self.assertLessEqual(result["char_count"], 200)
         self.assertEqual(engine.audit(result["text"])["level"], "safe")
 
+    def test_beauty_category_uses_skincare_scenes(self):
+        result = expander.expand(
+            "祛痘精华",
+            "祛痘，清爽，油皮适用，水杨酸",
+            category="美妆",
+        )
+        self.assertEqual(result["category"], "美妆")
+        self.assertIn("功效与功能", result["used"])
+        for word in ("水果", "切一盘", "坏果", "苹果"):
+            self.assertNotIn(word, result["text"])
+        self.assertIn("护肤", result["text"])
+
+    def test_category_changes_scene_language(self):
+        fruit = expander.expand("烟台红富士苹果", self.SOURCE, category="农产品")
+        beauty = expander.expand("祛痘精华", "祛痘，清爽", category="美妆")
+        self.assertIn("水果", fruit["text"])
+        self.assertNotIn("水果", beauty["text"])
+        self.assertNotEqual(fruit["category"], beauty["category"])
+
 
 if __name__ == "__main__":
     unittest.main()
