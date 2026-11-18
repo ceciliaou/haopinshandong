@@ -381,21 +381,6 @@ def suggest_gap_fill(item: dict, source: str) -> str:
     return ""
 
 
-def sync_gap_to_sidebar() -> None:
-    """按钮回调：把方向补全里编辑过的产品资料写回侧边栏。"""
-    source = str(st.session_state.get("gap_source", "")).strip()
-    if not source:
-        st.session_state["gap_sync_flash"] = "产品资料为空，未同步。"
-        return
-    st.session_state["features"] = source
-    st.session_state["expand_source"] = source
-    merged = st.session_state.get("gap_merged") or st.session_state.get("gap_text", "")
-    if merged:
-        st.session_state["audit_text"] = merged
-        st.session_state["audit_result"] = engine.audit(merged)
-    st.session_state["gap_sync_flash"] = "已把方向补全的产品资料同步到侧边栏，合规预审文案也已更新。"
-
-
 def sync_gap_from_sidebar() -> None:
     """按钮回调：重新读取侧边栏资料。"""
     st.session_state["gap_source"] = st.session_state["features"]
@@ -1084,7 +1069,6 @@ if nav == NAV_GAP:
                     product, gap_text, gap_category, source=gap_source
                 )
     with sync_col:
-        st.button("同步到侧边栏", key="sync_gap_to_sidebar", use_container_width=True, on_click=sync_gap_to_sidebar)
         st.button("读取侧边栏", key="sync_gap_from_sidebar", use_container_width=True, on_click=sync_gap_from_sidebar)
 
     gap = st.session_state.get("gap_result")
