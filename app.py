@@ -16,6 +16,7 @@ import streamlit as st
 import content
 import content_gaps
 import engine
+import expander
 
 # ---------------------------------------------------------------------------
 # 配置
@@ -213,6 +214,7 @@ CSS = """
 .gap-row-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:6px; }
 .gap-row-note { margin-left:auto; font-size:11px; color:var(--muted); }
 .gap-covered-label { font-size:11px; font-weight:700; color:var(--muted); margin-right:2px; }
+.expand-title { font-size:21px; font-weight:900; color:var(--ink); line-height:1.45; margin:8px 0 4px; }
 @media (max-width: 900px) {
   .gap-summary { grid-template-columns:repeat(2, minmax(0,1fr)); }
   .gap-row-note { margin-left:0; }
@@ -595,6 +597,12 @@ if generate:
         del st.session_state[gap_key]
     st.session_state["predict_result"] = None
     st.session_state["gen_fixed"] = None
+    st.session_state["expand_source"] = st.session_state["features"]
+    st.session_state["expand_platform"] = platform if platform in PLATFORM_KEYS else "xiaohongshu"
+    st.session_state["expand_result"] = None
+    st.session_state["expand_body"] = ""
+    st.session_state["expand_seed"] = 0
+    st.session_state["expand_flash"] = None
 
 # 演示模式：?demo=1 自动生成，方便截图和演示
 if st.query_params.get("demo") == "1" and st.session_state.get("gen") is None:
@@ -630,8 +638,8 @@ block(
     """
 )
 
-tab_gen, tab_gap, tab_audit, tab_predict, tab_about = st.tabs(
-    ["✍️ 智能生成", "🧭 方向补全", "🛡️ 合规预审", "📈 传播预判", "📦 作品说明"]
+tab_gen, tab_expand, tab_gap, tab_audit, tab_predict, tab_about = st.tabs(
+    ["✍️ 智能生成", "📝 素材扩写", "🧭 方向补全", "🛡️ 合规预审", "📈 传播预判", "📦 作品说明"]
 )
 
 # ---------------------------------------------------------------------------
@@ -755,6 +763,137 @@ with tab_audit:
             st.session_state["audit_result"] = engine.audit(audit_text)
     if st.session_state.get("audit_result"):
         render_risk_result(st.session_state["audit_result"])
+
+# ---------------------------------------------------------------------------
+# 2. 素材扩写
+# ---------------------------------------------------------------------------
+
+with tab_expand:
+    block(
+        """
+        <div class="section-kicker">MATERIAL EXPANSION</div>
+        <div class="section-title">把三句话，扩成一篇能发的文案</div>
+        <div class="section-desc">基于原始简短素材补结构、补场景、补细节；只复述素材里的事实，缺的信息会变成补全建议。</div>
+        """
+    )
+
+    flash = st.session_state.pop("expand_flash", "")
+    if flash:
+        st.success(flash)
+
+    default_expand_platform = st.session_state.get("platform", "xiaohongshu")
+    if default_expand_platform not in PLATFORM_KEYS:
+        default_expand_platform = "xiaohongshu"
+    if st.session_state.get("expand_platform") not in PLATFORM_KEYS:
+        st.session_state["expand_platform"] = default_expand_platform
+    st.session_state.setdefault("expand_style", expander.STYLES[0])
+    st.session_state.setdefault("expand_length", "标准")
+    st.session_state.setdefault("expand_seed", 0)
+    st.session_state.setdefault("expand_source", st.session_state["features"])
+
+    input_col, setting_col = st.columns([1.3, 1], gap="large")
+    with input_col:
+        expand_source = st.text_area(
+            "原始简短素材",
+            height=170,
+            key="expand_source",
+            placeholder="例如：烟台苹果，脆甜多汁，现摘现发，果径80mm以上，坏果包赔。",
+        )
+        st.caption("几句话、几个卖点即可。扩写会保留这些事实，不会自动编造检测、价格或产地。")
+    with setting_col:
+        expand_platform = st.selectbox(
+            "目标渠道",
+            PLATFORM_KEYS,
+            format_func=lambda key: PLATFORM_LABELS[key],
+            key="expand_platform",
+        )
+        expand_style = st.selectbox("表达风格", expander.STYLES, key="expand_style")
+        expand_length = st.selectbox("篇幅", list(expander.LENGTHS.keys()), key="expand_length")
+        button_col, reroll_col = st.columns(2)
+        with button_col:
+            run_expand = st.button("扩写成完整文案", type="primary", key="run_expand", use_container_width=True)
+        with reroll_col:
+            reroll = st.button("换一版", key="reroll_expand", use_container_width=True)
+
+    def _run_expand() -> bool:
+        if not expand_source.strip():
+            st.warning("请先输入几句原始素材。")
+            return False
+        result = expander.expand(
+            product,
+            expand_source,
+            expand_platform,
+            expand_style,
+            expand_length,
+            seed=st.session_state.get("expand_seed", 0),
+        )
+        st.session_state["expand_result"] = result
+        st.session_state["expand_body"] = result["body"]
+        return True
+
+    if run_expand:
+        _run_expand()
+    if reroll:
+        st.session_state["expand_seed"] = st.session_state.get("expand_seed", 0) + 1
+        _run_expand()
+
+    result = st.session_state.get("expand_result")
+    if result:
+        block(
+            f"""
+            <div class="stat-grid">
+              {stat("文案字数", result["char_count"], f"目标约 {result.get('target', 0)} 字")}
+              {stat("饱满度", f"{result['fullness']}%", result["fullness_level"])}
+              {stat("采用素材", len(result["used"]), "个方向")}
+              {stat("待补事实", len(result["missing"]), "个方向")}
+            </div>
+            """
+        )
+        st.progress(result["fullness"] / 100, text=f"{result['fullness_level']} · {result['style']} · {PLATFORM_LABELS[result['channel']]}")
+        if result.get("title"):
+            block(f'<div class="expand-title">{html.escape(result["title"])}</div>')
+
+        st.session_state.setdefault("expand_body", result["body"])
+        body_text = st.text_area(
+            "扩写后的正文（可继续编辑）",
+            height=420,
+            key="expand_body",
+        )
+        full_text = (result["title"] + "\n\n" if result.get("title") else "") + body_text
+
+        action_col, audit_col = st.columns([1, 1])
+        with action_col:
+            st.download_button(
+                "下载扩写文案",
+                data=full_text,
+                file_name="好品山东_扩写文案.txt",
+                mime="text/plain",
+                use_container_width=True,
+            )
+        with audit_col:
+            if st.button("送去合规预审", type="primary", key="expand_to_audit", use_container_width=True):
+                if not body_text.strip():
+                    st.warning("文案为空，无法预审。")
+                else:
+                    st.session_state["audit_pending"] = full_text
+                    st.session_state["expand_flash"] = "扩写文案已同步到「合规预审」页签。"
+                    st.rerun()
+
+        with st.expander("这篇用了哪些素材 / 还可以补什么"):
+            if result["used"]:
+                block(
+                    '<div class="keyword-row">'
+                    + "".join(f'<span class="keyword-chip">{html.escape(name)}</span>' for name in result["used"])
+                    + "</div>"
+                )
+            else:
+                st.caption("素材信息较少，建议先补一两个具体事实。")
+            if result["suggestions"]:
+                st.markdown("**补上会更饱满：**")
+                for suggestion in result["suggestions"]:
+                    st.markdown(f"- {suggestion}")
+            st.caption("本地扩写只复述素材中的事实；价格、检测、认证等具体信息请以商品页和包装为准。")
+
 
 # ---------------------------------------------------------------------------
 # 4. 方向补全
