@@ -55,8 +55,17 @@ def _load_env() -> None:
             os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
 
+def _streamlit_secret(name: str) -> str:
+    """读取 Streamlit Cloud 的 Secrets；本地没有配置时返回空字符串。"""
+    try:
+        value = st.secrets.get(name, "")
+        return str(value).strip()
+    except Exception:
+        return ""
+
+
 _load_env()
-API_KEY = os.getenv("SILICONFLOW_API_KEY", "").strip()
+API_KEY = (os.getenv("SILICONFLOW_API_KEY", "") or _streamlit_secret("SILICONFLOW_API_KEY")).strip()
 
 
 # ---------------------------------------------------------------------------
