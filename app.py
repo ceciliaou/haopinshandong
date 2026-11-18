@@ -812,11 +812,26 @@ if nav == NAV_AUDIT:
         key="audit_text",
         placeholder="粘贴需要审核的文案...",
     )
-    if st.button("开始预审", type="primary", key="run_audit"):
-        if not audit_text.strip():
-            st.warning("请先输入文案。")
-        else:
-            st.session_state["audit_result"] = engine.audit(audit_text)
+    audit_col, predict_col = st.columns(2)
+    with audit_col:
+        if st.button("开始预审", type="primary", key="run_audit", use_container_width=True):
+            if not audit_text.strip():
+                st.warning("请先输入文案。")
+            else:
+                st.session_state["audit_result"] = engine.audit(audit_text)
+    with predict_col:
+        if st.button("送到传播预判", key="audit_to_predict", use_container_width=True):
+            if not audit_text.strip():
+                st.warning("请先输入文案。")
+            else:
+                st.session_state["audit_result"] = engine.audit(audit_text)
+                st.session_state["predict_text"] = audit_text
+                st.session_state["predict_result"] = None
+                current_platform = st.session_state.get("platform", "xiaohongshu")
+                st.session_state["predict_platform"] = current_platform if current_platform in PLATFORM_KEYS else "xiaohongshu"
+                st.session_state["predict_flash"] = "已把合规文案带入传播预判。"
+                st.session_state["nav_target"] = NAV_PREDICT
+                st.rerun()
     if st.session_state.get("audit_result"):
         render_risk_result(st.session_state["audit_result"])
 
@@ -1217,6 +1232,9 @@ if nav == NAV_PREDICT:
     if st.session_state.get("gen"):
         default_predict = st.session_state["gen"]["items"][0]["text"]
     st.session_state.setdefault("predict_text", default_predict)
+    predict_flash = st.session_state.pop("predict_flash", "")
+    if predict_flash:
+        st.success(predict_flash)
     predict_text = st.text_area(
         "待评估文案",
         height=150,
