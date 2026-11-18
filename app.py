@@ -1174,7 +1174,7 @@ with tab_about:
         <div class="quote">{html.escape(content.WORK['intro'])}</div>
         """
     )
-    st.caption(f"作品链接：{content.WORK['link']}")
+    st.markdown(f"作品链接：[{content.WORK['link']}]({content.WORK['link']})")
 
     st.markdown("##### 设计思路")
     col1, col2 = st.columns(2)

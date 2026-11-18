@@ -15,7 +15,7 @@ WORK = {
         "低成本产出可信文案。创新点为可解释的合规报告、本地优先的双模式、传播归因与内容缺口扫描。"
         "AI工具：DeepSeek（deepseek-flash）。"
     ),
-    "link": "部署后填写（当前可本地运行 app.py）",
+    "link": "https://haopinshandong-bhfdlfwuiqdfko8sn3eafv.streamlit.app/",
 }
 
 DESIGN_IDEAS = [
