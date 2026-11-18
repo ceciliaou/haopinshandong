@@ -4,6 +4,8 @@
 
 保留原来的 Streamlit 基本页面与操作路径，视觉与能力做了一轮升级；默认使用本地规则引擎，**不配置 API Key 也能完整跑通**。
 
+> 代码仓库：<https://github.com/ceciliaou/haopinshandong>
+
 ## 运行
 
 ```powershell
