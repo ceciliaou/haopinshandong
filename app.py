@@ -308,6 +308,24 @@ CSS = """
 .stTabs [data-baseweb="tab-border"],
 .stTabs .react-aria-SelectionIndicator { display: none !important; }
 .stTabs [data-baseweb="tab-panel"] { padding-top: 6px; }
+[data-testid="stButtonGroup"] { margin: 2px 0 10px; }
+[data-testid="stButtonGroup"] button[data-variant="segmented_control"] {
+  background: #ffffff; border: 1px solid var(--line); border-radius: 10px;
+  color: var(--ink); padding: 6px 11px; box-shadow: none;
+}
+[data-testid="stButtonGroup"] button[data-variant="segmented_control"] p {
+  font-size: 12.5px; font-weight: 800; color: var(--ink);
+}
+[data-testid="stButtonGroup"] button[data-variant="segmented_control"]:hover {
+  border-color: #9fd8d0; background: #f2fbf8;
+}
+[data-testid="stButtonGroup"] button[data-variant="segmented_control"][aria-checked="true"] {
+  background: linear-gradient(135deg, #0b3d5c, #0f766e); border-color: transparent;
+  box-shadow: 0 6px 14px rgba(11,61,92,.20);
+}
+[data-testid="stButtonGroup"] button[data-variant="segmented_control"][aria-checked="true"] p {
+  color: #ffffff;
+}
 .stButton > button { border-radius: 10px; border:1px solid var(--line); font-weight: 700; }
 .stButton > button[kind="primary"] {
   background: linear-gradient(135deg, #0b3d5c, #0f766e); border: 0; color:#fff;
@@ -363,10 +381,42 @@ def suggest_gap_fill(item: dict, source: str) -> str:
     return ""
 
 
-def sync_gap_source() -> None:
-    """按钮回调：在 gap_source 组件实例化前同步侧边栏资料。"""
+def sync_gap_to_sidebar() -> None:
+    """按钮回调：把方向补全里编辑过的产品资料写回侧边栏。"""
+    source = str(st.session_state.get("gap_source", "")).strip()
+    if not source:
+        st.session_state["gap_sync_flash"] = "产品资料为空，未同步。"
+        return
+    st.session_state["features"] = source
+    st.session_state["expand_source"] = source
+    merged = st.session_state.get("gap_merged") or st.session_state.get("gap_text", "")
+    if merged:
+        st.session_state["audit_text"] = merged
+        st.session_state["audit_result"] = engine.audit(merged)
+    st.session_state["gap_sync_flash"] = "已把方向补全的产品资料同步到侧边栏，合规预审文案也已更新。"
+
+
+def sync_gap_from_sidebar() -> None:
+    """按钮回调：重新读取侧边栏资料。"""
     st.session_state["gap_source"] = st.session_state["features"]
-    st.session_state["gap_sync_flash"] = "已同步侧边栏产品资料，建议重新扫描内容缺口。"
+    st.session_state["gap_sync_flash"] = "已读取侧边栏产品资料，建议重新扫描内容缺口。"
+
+
+def sync_audit_to_sidebar() -> None:
+    """按钮回调：把合规预审文案写回侧边栏。"""
+    text = str(st.session_state.get("audit_text", "")).strip()
+    if not text:
+        st.session_state["audit_sync_flash"] = "待审核文案为空，未同步。"
+        return
+    st.session_state["features"] = text
+    st.session_state["audit_sync_flash"] = "已把合规预审文案同步到侧边栏。"
+
+
+def sync_audit_from_sidebar() -> None:
+    """按钮回调：用侧边栏资料替换待审核文案。"""
+    st.session_state["audit_text"] = st.session_state["features"]
+    st.session_state["audit_result"] = None
+    st.session_state["audit_sync_flash"] = "已读取侧边栏产品资料，重新预审即可。"
 
 
 def parse_ai_copies(raw: str, count: int = 3) -> list[str]:
@@ -640,15 +690,26 @@ block(
     """
 )
 
-tab_gen, tab_expand, tab_gap, tab_audit, tab_predict, tab_about = st.tabs(
-    ["✍️ 智能生成", "📝 素材扩写", "🧭 方向补全", "🛡️ 合规预审", "📈 传播预判", "📦 作品说明"]
+NAV_OPTIONS = ["✍️ 智能生成", "📝 素材扩写", "🧭 方向补全", "🛡️ 合规预审", "📈 传播预判", "📦 作品说明"]
+NAV_GEN, NAV_EXPAND, NAV_GAP, NAV_AUDIT, NAV_PREDICT, NAV_ABOUT = NAV_OPTIONS
+if "nav_target" in st.session_state:
+    st.session_state["nav_control"] = st.session_state.pop("nav_target")
+nav = st.segmented_control(
+    "功能导航",
+    NAV_OPTIONS,
+    default=None if "nav_control" in st.session_state else NAV_GEN,
+    key="nav_control",
+    label_visibility="collapsed",
+    selection_mode="single",
 )
+if not nav:
+    nav = NAV_GEN
 
 # ---------------------------------------------------------------------------
 # 1. 智能生成
 # ---------------------------------------------------------------------------
 
-with tab_gen:
+if nav == NAV_GEN:
     gen = st.session_state.get("gen")
     if not gen:
         block(
@@ -736,7 +797,7 @@ with tab_gen:
 # 2. 合规预审
 # ---------------------------------------------------------------------------
 
-with tab_audit:
+if nav == NAV_AUDIT:
     block(
         """
         <div class="section-kicker">COMPLIANCE AUDIT</div>
@@ -748,6 +809,14 @@ with tab_audit:
     if st.session_state.get("gen"):
         default_audit = "\n".join(item["text"] for item in st.session_state["gen"]["items"])
     st.session_state.setdefault("audit_text", default_audit)
+    sync_flash = st.session_state.pop("audit_sync_flash", "")
+    if sync_flash:
+        st.success(sync_flash)
+    sync_col1, sync_col2 = st.columns(2)
+    with sync_col1:
+        st.button("使用侧边栏资料", key="audit_from_sidebar", use_container_width=True, on_click=sync_audit_from_sidebar)
+    with sync_col2:
+        st.button("同步到侧边栏", key="audit_to_sidebar", use_container_width=True, on_click=sync_audit_to_sidebar)
     if st.button("填入风险示例", key="load_audit_demo"):
         demo_text = "国家级认证的最佳苹果，100%纯天然，根治便秘，投资回报率高达500%，加微信享内部价。"
         st.session_state["audit_text"] = demo_text
@@ -770,7 +839,7 @@ with tab_audit:
 # 2. 素材扩写
 # ---------------------------------------------------------------------------
 
-with tab_expand:
+if nav == NAV_EXPAND:
     block(
         """
         <div class="section-kicker">MATERIAL EXPANSION</div>
@@ -892,12 +961,23 @@ with tab_expand:
                 use_container_width=True,
             )
         with audit_col:
-            if st.button("送去合规预审", type="primary", key="expand_to_audit", use_container_width=True):
+            if st.button("送去方向补全", type="primary", key="expand_to_gap", use_container_width=True):
                 if not body_text.strip():
-                    st.warning("文案为空，无法预审。")
+                    st.warning("文案为空，无法进行方向分析。")
                 else:
-                    st.session_state["audit_pending"] = full_text
-                    st.session_state["expand_flash"] = "扩写文案已同步到「合规预审」页签。"
+                    st.session_state["gap_text"] = full_text
+                    st.session_state["gap_source"] = expand_source
+                    st.session_state["gap_category"] = result["category"] if result["category"] in content_gaps.CATEGORY_LABELS else "自动识别"
+                    st.session_state["gap_result"] = None
+                    st.session_state["gap_review"] = None
+                    st.session_state["gap_merged"] = None
+                    st.session_state["gap_reviewed_text"] = ""
+                    for gap_key in [key for key in st.session_state.keys() if key.startswith("gap_fill_")]:
+                        del st.session_state[gap_key]
+                    st.session_state["audit_text"] = full_text
+                    st.session_state["audit_result"] = None
+                    st.session_state["gap_import_flash"] = "已把扩写文案带入方向分析；确认产品资料后点「扫描内容缺口」。"
+                    st.session_state["nav_target"] = NAV_GAP
                     st.rerun()
 
         with st.expander("这篇用了哪些素材 / 还可以补什么"):
@@ -920,7 +1000,7 @@ with tab_expand:
 # 4. 方向补全
 # ---------------------------------------------------------------------------
 
-with tab_gap:
+if nav == NAV_GAP:
     block(
         """
         <div class="section-kicker">CONTENT GAP RADAR</div>
@@ -933,6 +1013,9 @@ with tab_gap:
     sync_flash = st.session_state.pop("gap_sync_flash", "")
     if sync_flash:
         st.success(sync_flash)
+    import_flash = st.session_state.pop("gap_import_flash", "")
+    if import_flash:
+        st.success(import_flash)
     if review:
         flash = st.session_state.pop("gap_flash", "")
         if flash:
@@ -1001,7 +1084,8 @@ with tab_gap:
                     product, gap_text, gap_category, source=gap_source
                 )
     with sync_col:
-        st.button("同步侧边栏", key="sync_gap_source", use_container_width=True, on_click=sync_gap_source)
+        st.button("同步到侧边栏", key="sync_gap_to_sidebar", use_container_width=True, on_click=sync_gap_to_sidebar)
+        st.button("读取侧边栏", key="sync_gap_from_sidebar", use_container_width=True, on_click=sync_gap_from_sidebar)
 
     gap = st.session_state.get("gap_result")
     if gap:
@@ -1061,18 +1145,31 @@ with tab_gap:
         with right:
             block('<div class="section-kicker">补全文案</div>')
             if st.button("生成补全文案", key="build_gap_copy", use_container_width=True):
-                parts = [gap_text.strip()]
+                fills = []
                 for item in gap["recommended"]:
                     fill = str(st.session_state.get(f"gap_fill_{item['key']}", "")).strip()
-                    if not fill or fill in parts:
+                    if not fill:
                         continue
-                    if not re.search(r"[。！？!?]$", fill):
-                        fill += "。"
-                    parts.append(fill)
-                if len(parts) <= 1:
+                    fills.append({
+                        "key": item["key"],
+                        "name": item["name"],
+                        "stage": item["stage"],
+                        "text": fill,
+                    })
+                if not fills:
                     st.warning("请至少补充一条内容，再生成补全文案。")
                 else:
-                    st.session_state["gap_merged"] = "\n\n".join(parts)
+                    merged = content_gaps.merge_copy(gap_text, fills)
+                    st.session_state["gap_merged"] = merged["text"]
+                    st.session_state["gap_merge_info"] = (
+                        f"已把 {len(merged['inserted'])} 条补全插入对应段落"
+                        + (f"，跳过 {len(merged['skipped'])} 条重复内容" if merged["skipped"] else "")
+                    )
+                    st.session_state["audit_text"] = merged["text"]
+                    st.session_state["audit_result"] = engine.audit(merged["text"])
+
+            if st.session_state.get("gap_merge_info"):
+                st.caption(st.session_state.pop("gap_merge_info"))
 
             if st.session_state.get("gap_merged"):
                 merged_text = st.text_area(
@@ -1093,9 +1190,8 @@ with tab_gap:
                         st.warning("补全文案为空，无法审查。")
                     else:
                         st.session_state["audit_pending"] = merged_text
-                        st.session_state["gap_review"] = engine.audit(merged_text)
-                        st.session_state["gap_reviewed_text"] = merged_text
-                        st.session_state["gap_flash"] = "补全文案已同步到「合规预审」页签，完整报告可在该页签查看。"
+                        st.session_state["audit_sync_flash"] = "已从方向补全进入合规审查。"
+                        st.session_state["nav_target"] = NAV_AUDIT
                         st.rerun()
             else:
                 st.caption("填写左侧补全句后，点「生成补全文案」。")
@@ -1125,7 +1221,7 @@ with tab_gap:
 # 5. 传播预判
 # ---------------------------------------------------------------------------
 
-with tab_predict:
+if nav == NAV_PREDICT:
     block(
         """
         <div class="section-kicker">CONTENT POTENTIAL</div>
@@ -1186,7 +1282,7 @@ with tab_predict:
 # 6. 作品说明
 # ---------------------------------------------------------------------------
 
-with tab_about:
+if nav == NAV_ABOUT:
     block(
         f"""
         <div class="section-kicker">ABOUT THE WORK</div>

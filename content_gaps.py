@@ -29,7 +29,7 @@ DIRECTIONS = {
     },
     "freshness": {
         "name": "新鲜与时效",
-        "keywords": ["现摘", "现采", "现发", "当天", "24小时", "48小时", "冷链", "冰袋", "泡沫箱", "新鲜", "采摘", "发货", "到货", "顺丰"],
+        "keywords": ["现摘", "现采", "现发", "当天", "24小时", "48小时", "冷链", "冰袋", "泡沫箱", "新鲜", "采摘", "发货", "到货", "顺丰", "直发"],
         "why": "生鲜/食品的“新鲜”不能只喊口号，采摘与发货时效才是证据。",
         "angle": "写清采摘时间、发货时效、冷链/包装方式。",
         "template": "「____采摘，____小时内发货，____冷链/包装，收到还是____。」",
@@ -507,3 +507,87 @@ def analyze(product: str, copy: str, category: str | None = None, limit: int = 5
         "covered_count": len(covered),
         "available_count": available_count,
     }
+
+
+def merge_copy(original: str, fills: list[dict]) -> dict:
+    """把补全句插入到原文的语义位置，而不是统一粘在末尾。"""
+    original = str(original or "").strip()
+    if not original:
+        return {"text": "", "inserted": [], "skipped": []}
+
+    sentences = [s.strip() for s in re.findall(r"[^。！？!?；;\n]+[。！？!?；;]?", original) if s.strip()]
+    if not sentences:
+        sentences = [original]
+
+    stage_transition = {
+        "信任": "此外，",
+        "信息": "具体来说，",
+        "体验": "口感上，",
+        "场景": "日常使用时，",
+        "决策": "选购时，",
+        "使用": "使用上，",
+    }
+    key_prefix = {
+        "after_sales": "售后方面，",
+        "quality": "品质信息上，",
+        "freshness": "新鲜度上，",
+        "logistics": "物流包装上，",
+        "spec": "规格上，",
+        "variety": "规格上，",
+        "price": "价格上，",
+        "scene": "日常使用时，",
+        "usage": "使用上，",
+        "gift": "如果是送人，",
+        "reviews": "口碑方面，",
+        "certification": "认证信息上，",
+        "nutrition": "营养信息上，",
+        "season": "时令上，",
+        "brand": "品牌背景上，",
+        "promotion": "活动方面，",
+        "sustainability": "产地与助农方面，",
+        "pairing": "吃法上，",
+        "comparison": "对比来看，",
+    }
+    inserted, skipped = [], []
+    anchor_counts: dict[int, int] = {}
+    for fill in fills:
+        text = str(fill.get("text", "")).strip()
+        if not text:
+            continue
+        bare = text.rstrip("。！？!?；;")
+        if not bare or bare in original:
+            skipped.append(fill.get("key", ""))
+            continue
+
+        key = fill.get("key", "")
+        direction = DIRECTIONS.get(key, {})
+        keywords = direction.get("keywords", [])
+        scores = [sum(1 for kw in keywords if kw in sentence) for sentence in sentences]
+        best = max(scores) if scores else 0
+        if best > 0:
+            anchor = scores.index(best)
+        else:
+            stage = fill.get("stage", "信息")
+            if stage in ("场景", "决策", "使用", "信任"):
+                anchor = max(0, len(sentences) - 2)
+            else:
+                anchor = 0
+
+        if not re.search(r"[。！？!?；;]$", text):
+            text += "。"
+        prefix = key_prefix.get(key) or stage_transition.get(fill.get("stage", "信息"), "此外，")
+        lead_words = (
+            "另外", "此外", "同时", "如果", "选购", "日常", "使用", "口感", "具体",
+            "售后", "品质", "新鲜", "物流", "规格", "价格", "口碑", "认证", "营养",
+            "时令", "品牌", "活动", "产地", "吃法", "对比",
+        )
+        if not text.startswith(lead_words):
+            text = prefix + text
+        insert_at = anchor + 1 + anchor_counts.get(anchor, 0)
+        sentences.insert(insert_at, text)
+        anchor_counts[anchor] = anchor_counts.get(anchor, 0) + 1
+        inserted.append(key)
+
+    # 每 2 句一段，避免补全后变成一整块文字
+    paragraphs = ["".join(sentences[i:i + 2]) for i in range(0, len(sentences), 2)]
+    return {"text": "\n\n".join(paragraphs), "inserted": inserted, "skipped": skipped}

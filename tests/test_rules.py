@@ -52,7 +52,7 @@ class ContentGapTests(unittest.TestCase):
     def test_source_facts_are_flagged_as_available(self):
         result = content_gaps.analyze(
             "烟台红富士苹果",
-            "脆甜多汁，产地直发。",
+            "脆甜多汁，果径80mm以上。",
             category="农产品",
             source="果园现摘现发，坏果包赔。",
         )
@@ -82,6 +82,29 @@ class DirectionLibraryTests(unittest.TestCase):
     def test_templates_have_variants(self):
         self.assertGreaterEqual(len(content_gaps.TEMPLATE_VARIANTS["taste"]), 2)
         self.assertGreaterEqual(len(content_gaps.TEMPLATE_VARIANTS["reviews"]), 2)
+
+
+class MergeTests(unittest.TestCase):
+    def test_fill_inserted_near_anchor_not_only_at_end(self):
+        merged = content_gaps.merge_copy(
+            "烟台苹果，产地直发。口感脆甜。坏果包赔。",
+            [
+                {"key": "freshness", "text": "果园现摘现发", "stage": "信任"},
+                {"key": "variety", "text": "果径80mm以上", "stage": "信息"},
+            ],
+        )
+        text = merged["text"]
+        self.assertIn("新鲜度上", text)
+        self.assertIn("规格上", text)
+        self.assertLess(text.find("新鲜度上"), text.find("口感脆甜"))
+
+    def test_duplicate_fill_is_skipped(self):
+        merged = content_gaps.merge_copy(
+            "坏果包赔。",
+            [{"key": "after_sales", "text": "坏果包赔", "stage": "信任"}],
+        )
+        self.assertEqual(merged["inserted"], [])
+        self.assertEqual(merged["skipped"], ["after_sales"])
 
 
 if __name__ == "__main__":
