@@ -50,6 +50,23 @@ cd D:\projecttext
 
 > 注意：当前 `.evn` 是本机私有的 Key 文件，分发/提交前请删除或改用环境变量，避免密钥泄露。
 
+## Streamlit Community Cloud 接入 AI
+
+1. 用 GitHub 登录 <https://share.streamlit.io/>，选择 `ceciliaou/haopinshandong` 仓库；
+2. Main file 填 `app.py`，部署；
+3. 进入应用的 **Settings → Secrets**，填写：
+
+```toml
+SILICONFLOW_API_KEY = "sk-你的Key"
+```
+
+4. 保存后点击 **Reboot app**；
+5. 打开应用，在侧边栏选择「AI 增强（DeepSeek-V3.2）」即可。
+
+代码已支持读取 `st.secrets`，不需要改代码。没有配置 Secret 时，应用会自动使用本地规则引擎。
+
+> 公开链接使用服务端 Key 时，任何访客都能消耗额度。建议使用单独的限额 Key、在 SiliconFlow 控制台设置额度/告警，并定期轮换；不要把高额度主 Key 直接放到公开应用。
+
 ## 视觉
 
 - 深海军蓝 + 墨绿 + 金色的「山东产地」主题；
